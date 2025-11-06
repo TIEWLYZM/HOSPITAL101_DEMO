@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ประวัตินัดหมาย</title>
+    <style>
+      :root {
+        --bg: #0c1220;
+        --card: #121a2b;
+        --muted: #8ea0bd;
+        --text: #e6ecff;
+        --line: #24324d;
+        --accent: #0ea5e9;
+        --ok: #22c55e;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: system-ui, Segoe UI, Roboto, Arial;
+      }
+      .wrap {
+        max-width: 1100px;
+        margin: 48px auto;
+        padding: 0 20px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 18px;
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+      input,
+      select,
+      button {
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: #0e1626;
+        color: var(--text);
+      }
+      table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        margin-top: 10px;
+      }
+      thead th {
+        font-size: 12px;
+        color: var(--muted);
+        text-align: left;
+        padding: 10px 12px;
+        background: #0e1626;
+        border-bottom: 1px solid var(--line);
+      }
+      tbody td {
+        padding: 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      tbody tr:hover {
+        background: #0e1626;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <div class="row">
+          <input
+            id="appt_id"
+            placeholder="appointment_id"
+            style="min-width: 260px"
+          /><select id="new_status">
+            <option value="S004">Confirm</option>
+            <option value="S003">Cancel</option></select
+          ><input
+            id="cancel_reason"
+            placeholder="เหตุผลยกเลิก (ถ้า Cancel)"
+            style="flex: 1"
+          /><button id="btnChange">บันทึก</button>
+        </div>
+        <div style="overflow: auto">
+          <table id="tbl">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>วันที่</th>
+                <th>เริ่ม</th>
+                <th>สิ้นสุด</th>
+                <th>สถานะ</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <script type="module">
+      import { apiGet, apiPatch } from "./js/api.js";
+      async function load() {
+        const v = await apiGet("/api/views/patient_appointment_status");
+        const rows = v.rows;
+        const tb = document.querySelector("#tbl tbody");
+        tb.innerHTML = rows
+          .map(
+            (r) =>
+              `<tr><td>${r.APPOINTMENT_ID}</td><td>${(r.APPOINTMENT_DATE || "")
+                .toString()
+                .substring(0, 10)}</td><td>${r.TIME_START || ""}</td><td>${
+                r.TIME_END || ""
+              }</td><td>${r.STATUS_NAME}</td></tr>`
+          )
+          .join("");
+      }
+      load();
+      document.getElementById("btnChange").onclick = async () => {
+        const id = document.getElementById("appt_id").value.trim();
+        const st = document.getElementById("new_status").value;
+        const reason = document.getElementById("cancel_reason").value;
+        const r = await apiPatch(`/api/appointments/${id}/status`, {
+          new_status_id: st,
+          changed_by: null,
+          cancel_reason: reason,
+        });
+        alert(r.ok ? "สำเร็จ" : `ล้มเหลว: ${r.message}`);
+        load();
+      };
+    </script>
+  </body>
+</html>

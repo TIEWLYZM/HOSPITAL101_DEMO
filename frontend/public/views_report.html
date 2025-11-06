@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Views Report</title>
+    <style>
+      :root {
+        --bg: #0c1220;
+        --card: #121a2b;
+        --muted: #8ea0bd;
+        --text: #e6ecff;
+        --line: #24324d;
+        --accent: #0ea5e9;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: system-ui, Segoe UI, Roboto, Arial;
+      }
+      .wrap {
+        max-width: 1100px;
+        margin: 48px auto;
+        padding: 0 20px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 18px;
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+      select,
+      button {
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: #0e1626;
+        color: var(--text);
+      }
+      table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        margin-top: 10px;
+      }
+      thead th {
+        font-size: 12px;
+        color: var(--muted);
+        text-align: left;
+        padding: 10px 12px;
+        background: #0e1626;
+        border-bottom: 1px solid var(--line);
+      }
+      tbody td {
+        padding: 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      tbody tr:hover {
+        background: #0e1626;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <div class="row">
+          <select id="v">
+            <option>rooms_by_department</option>
+            <option>doctors_by_department</option>
+            <option>patients_appointments_by_department</option>
+            <option>patients_by_doctor_name</option>
+            <option>appointment_status_history_view</option>
+            <option>doctor_appointments_all_dates</option>
+            <option>patient_appointment_status</option>
+            <option>room_schedule</option>
+            <option>appointments_confirmed</option>
+            <option>appointments_cancelled</option></select
+          ><button id="load">โหลด</button>
+        </div>
+        <div style="overflow: auto">
+          <table id="tbl">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <script type="module">
+      import { apiGet } from "./js/api.js";
+      function render(rows) {
+        const th = document.querySelector("#tbl thead"),
+          tb = document.querySelector("#tbl tbody");
+        if (!rows.length) {
+          th.innerHTML = "";
+          tb.innerHTML = "";
+          return;
+        }
+        const cols = Object.keys(rows[0]);
+        th.innerHTML = `<tr>${cols.map((c) => `<th>${c}</th>`).join("")}</tr>`;
+        tb.innerHTML = rows
+          .map(
+            (r) =>
+              `<tr>${cols.map((c) => `<td>${r[c] ?? ""}</td>`).join("")}</tr>`
+          )
+          .join("");
+      }
+      document.getElementById("load").onclick = async () => {
+        const v = document.getElementById("v").value;
+        const res = await apiGet(`/api/views/${v}`);
+        render(res.rows);
+      };
+    </script>
+  </body>
+</html>
