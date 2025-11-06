@@ -151,4 +151,61 @@ r.patch("/:id/status", async (req, res) => {
   }
 });
 
+// ======================= GET /api/appointments/:id (รายละเอียดเต็ม) =======================
+r.get("/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const data = await withConn(async (conn) => {
+      const ap = await conn.execute(
+        `
+        SELECT
+          a.appointment_id,
+          TO_CHAR(a.appointment_date, 'YYYY-MM-DD') AS appointment_date,
+          a.time_start, a.time_end, a.duration_min, a.notes, a.room_no,
+          a.status_id, s.status_name,
+          p.patient_id, (p.first_name||' '||p.last_name) AS patient_name,
+          d.doctor_id, d.full_name AS doctor_name,
+          dep.department_id, dep.dept_name,
+          r.room_id, r.room_name,
+          t.type_id, t.type_name
+        FROM appointments a
+          LEFT JOIN appointment_statuses s ON s.status_id = a.status_id
+          LEFT JOIN patients p ON p.patient_id = a.patient_id
+          LEFT JOIN doctors d ON d.doctor_id = a.doctor_id
+          LEFT JOIN departments dep ON dep.department_id = a.department_id
+          LEFT JOIN rooms r ON r.room_id = a.room_id
+          LEFT JOIN appointment_types t ON t.type_id = a.type_id
+        WHERE a.appointment_id = :id
+        `,
+        { id },
+        { outFormat: 4002 }
+      );
+
+      if (ap.rows.length === 0) return null;
+
+      const hist = await conn.execute(
+        `
+        SELECT
+          h.status_id, s.status_name,
+          TO_CHAR(h.changed_at, 'YYYY-MM-DD HH24:MI') AS changed_at,
+          h.changed_by, h.note
+        FROM appointment_status_history h
+          LEFT JOIN appointment_statuses s ON s.status_id = h.status_id
+        WHERE h.appointment_id = :id
+        ORDER BY h.changed_at
+        `,
+        { id },
+        { outFormat: 4002 }
+      );
+
+      return { appointment: ap.rows[0], history: hist.rows };
+    });
+
+    if (!data) return res.status(404).json({ ok: false, message: "ไม่พบใบนัด" });
+    res.json({ ok: true, ...data });
+  } catch (err) {
+    res.status(400).json({ ok: false, message: String(err.message || err) });
+  }
+});
+
 export default r;
