@@ -4,6 +4,15 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>ออกใบนัด (Create Appointment)</title>
+
+  <!-- Toastify -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+  <style>
+    .toast-success{ background: linear-gradient(135deg,#22c55e,#16a34a)!important; }
+    .toast-error{ background: linear-gradient(135deg,#ef4444,#dc2626)!important; }
+  </style>
+
   <style>
     :root{
       --bg:#0c1220;
@@ -41,7 +50,6 @@
     .btn-primary{background:var(--ok);color:#06210e}
     .btn-ghost{background:transparent;border-color:var(--line);color:#cde1ff}
     .btn-info{background:#0b3346;border-color:#11465f;color:#bfeaff}
-    /* 1 คอลัมน์ในจอแคบ */
     @media (max-width:840px){ .grid{grid-template-columns:1fr} }
   </style>
 </head>
@@ -61,15 +69,15 @@
         <div class="col">
           <div class="row">
             <label>ผู้ป่วย</label>
-            <select id="patient_id"><option value="">— เลือก —</option></select>
+            <select id="patient_id" required><option value="">— เลือก —</option></select>
           </div>
           <div class="row">
             <label>แผนก</label>
-            <select id="department_id"><option value="">— เลือก —</option></select>
+            <select id="department_id" required><option value="">— เลือก —</option></select>
           </div>
           <div class="row">
             <label>ประเภทนัด</label>
-            <select id="type_id"><option value="">— เลือก —</option></select>
+            <select id="type_id" required><option value="">— เลือก —</option></select>
           </div>
           <div class="row">
             <label>วันนัด (YYYY-MM-DD)</label>
@@ -89,7 +97,7 @@
         <div class="col">
           <div class="row">
             <label>แพทย์</label>
-            <select id="doctor_id"><option value="">— เลือก —</option></select>
+            <select id="doctor_id" required><option value="">— เลือก —</option></select>
           </div>
           <div class="row">
             <label>ห้อง</label>
@@ -129,6 +137,20 @@
   <script type="module">
     import { apiGet, apiPost } from "./js/api.js";
 
+    // helper toast
+    function toast(message, type = "info") {
+      Toastify({
+        text: message,
+        duration: 3000,
+        close: true,
+        gravity: "top",
+        position: "center",
+        stopOnFocus: true,
+        className: type === "success" ? "toast-success"
+               : type === "error"   ? "toast-error" : "",
+      }).showToast();
+    }
+
     // โหลดตัวเลือก
     const o = await apiGet("/api/options");
     const fill = (id, rows, v, t) => {
@@ -146,7 +168,7 @@
     fill("room_id", o.rooms, "ROOM_ID", "ROOM_NAME");
     fill("type_id", o.types, "TYPE_ID", "TYPE_NAME");
 
-    // ช่วยคำนวณเวลาสิ้นสุด (ตัวอย่างฝั่งหน้าเว็บ) = time_start + default_duration + duration_min
+    // คำนวณเวลาสิ้นสุดฝั่งหน้าเว็บ
     const typesById = Object.fromEntries(o.types.map(x => [x.TYPE_ID, Number(x.DEFAULT_DURATION_MIN || 0)]));
     const timeStartEl = document.getElementById("time_start");
     const typeEl = document.getElementById("type_id");
@@ -188,13 +210,26 @@
         notes: form.notes.value || null,
         room_no: form.room_no.value || null
       };
-      const msg = document.getElementById("msg");
+
+      // ตรวจค่าว่างหลัก ๆ ก่อนส่ง
+      if (!body.patient_id)  return toast("กรุณาเลือกผู้ป่วย", "error");
+      if (!body.department_id) return toast("กรุณาเลือกแผนก", "error");
+      if (!body.doctor_id)   return toast("กรุณาเลือกแพทย์", "error");
+      if (!body.type_id)     return toast("กรุณาเลือกประเภทนัด", "error");
+      if (!body.appointment_date) return toast("กรุณาเลือกวันที่นัด", "error");
+      if (!body.time_start)  return toast("กรุณาใส่เวลาเริ่ม", "error");
+
       try{
         const r = await apiPost("/api/appointments", body);
-        msg.textContent = r.ok ? `บันทึกสำเร็จ | เวลาสิ้นสุด: ${r.data.time_end}` : `ล้มเหลว: ${r.message}`;
-        if(r.ok){ form.reset(); endPreviewEl.value=""; }
+        if (r.ok) {
+          toast(`บันทึกสำเร็จ เวลาเสร็จสิ้น: ${r.data.time_end}`, "success");
+          form.reset();
+          endPreviewEl.value="";
+        } else {
+          toast(`ล้มเหลว: ${r.message}`, "error");
+        }
       }catch(err){
-        msg.textContent = "ล้มเหลว: " + (err?.message || err);
+        toast("ล้มเหลว: " + (err?.message || err), "error");
       }
     });
   </script>

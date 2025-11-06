@@ -25,16 +25,16 @@ r.get("/", async (_req, res) => {
   const total = Number(appt.rows[0].C || 0);
   const byStatus = Object.fromEntries(grp.rows.map(r => [r.STATUS_NAME, Number(r.C)]));
   const pct = total > 0 ? {
-    confirm: Math.round(((byStatus.Confirmed || 0) / total) * 100),
+    complete: Math.round(((byStatus.Completed || 0) / total) * 100),
     cancel: Math.round(((byStatus.Cancelled || 0) / total) * 100)
-  } : { confirm: 0, cancel: 0 };
+  } : { complete: 0, cancel: 0 };
 
   res.json({
     patients: Number(pat.rows[0].C || 0),
     doctors: Number(doc.rows[0].C || 0),
     appointments: total,
     upcoming_2h: Number(next2h.rows[0].C || 0),
-    percent_confirm: pct.confirm,
+    percent_complete: pct.complete,
     percent_cancel: pct.cancel
   });
 });

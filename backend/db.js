@@ -11,6 +11,9 @@ const cfg = {
   poolPingInterval: 60
 };
 
+// ✅ ให้ทุกคอลัมน์ชนิด DATE ส่งออกเป็น string แทนที่จะเป็น JS Date
+oracledb.fetchAsString = [ oracledb.DATE ];
+
 let pool;
 export async function initPool() {
   if (!pool) pool = await oracledb.createPool(cfg);
