@@ -208,4 +208,31 @@ r.get("/:id", async (req, res) => {
   }
 });
 
+// DELETE /api/appointments/:id  ลบใบนัด + ประวัติสถานะ
+r.delete("/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const out = await withConn(async (conn) => {
+      // ลบประวัติสถานะก่อน กัน FK ชน
+      await conn.execute(
+        `DELETE FROM appointment_status_history WHERE appointment_id = :id`,
+        { id }
+      );
+      const r = await conn.execute(
+        `DELETE FROM appointments WHERE appointment_id = :id`,
+        { id }
+      );
+      await conn.commit();
+      return { affected: r.rowsAffected || 0 };
+    });
+
+    if (out.affected === 0) {
+      return res.status(404).json({ ok: false, message: "ไม่พบใบนัดที่จะลบ" });
+    }
+    res.json({ ok: true, message: "ลบสำเร็จ", ...out });
+  } catch (err) {
+    res.status(400).json({ ok: false, message: String(err.message || err) });
+  }
+});
+
 export default r;

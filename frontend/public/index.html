@@ -127,15 +127,25 @@
     </div>
     <script type="module">
       import { apiGet } from "./js/api.js";
+
       (async () => {
-        const d = await apiGet("/api/dashboard");
+        const resp = await apiGet("/api/dashboard");
+        const d = resp?.data ?? resp ?? {};
+
+        const patients = d.patients ?? 0;
+        const doctors = d.doctors ?? 0;
+        const appointments = d.appointments ?? 0;
+        const upcoming2h = d.upcoming2h ?? d.upcoming_2h ?? 0;
+        const pctComplete = (d.pctComplete ?? d.percent_complete ?? 0) + "%";
+        const pctCancel = (d.pctCancel ?? d.percent_cancel ?? 0) + "%";
+
         const v = [
-          d.patients,
-          d.doctors,
-          d.appointments,
-          d.upcoming_2h,
-          d.percent_complete + "%",
-          d.percent_cancel + "%",
+          patients,
+          doctors,
+          appointments,
+          upcoming2h,
+          pctComplete,
+          pctCancel,
         ];
         document
           .querySelectorAll("#stats .value")
