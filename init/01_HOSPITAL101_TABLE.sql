@@ -581,101 +581,187 @@ WHERE NOT EXISTS (SELECT 1 FROM patients WHERE patient_id='PAT005');
 --------------------------------------------------------------------------------
 COMMIT;
 
--- init/01_HOSPITAL101_TABLE.sql (ONLY the VIEWS part changed to safe formats)
--- *** Place this file into your Oracle XE init folder if you want to recreate views ***
-
--- ห้องของแต่ละแผนก
+--ห้องของแต่ละแผนก
 CREATE OR REPLACE VIEW rooms_by_department AS
-SELECT d.department_id, d.dept_name, r.room_id, r.room_name, r.location_desc
+SELECT
+  d.department_id,
+  d.dept_name,
+  r.room_id,
+  r.room_name,
+  r.location_desc
 FROM rooms r
 JOIN departments d ON d.department_id = r.department_id;
 
--- หมอของแต่ละแผนก
+--หมอของแต่ละแผนก
 CREATE OR REPLACE VIEW doctors_by_department AS
-SELECT d.department_id, d.dept_name, doc.doctor_id, doc.full_name AS doctor_name, doc.specialty
+SELECT
+  d.department_id,
+  d.dept_name,
+  doc.doctor_id,
+  doc.full_name AS doctor_name,
+  doc.specialty
 FROM doctors doc
 LEFT JOIN departments d ON d.department_id = doc.department_id;
 
--- คนไข้ตามใบนัดของแต่ละแผนก
+--คนไข้ตามใบนัดของแต่ละแผนก
 CREATE OR REPLACE VIEW patients_appointments_by_department AS
-SELECT dept.department_id, dept.dept_name, appt.appointment_id,
-       appt.appointment_date,
-       appt.time_start, appt.time_end,
-       p.patient_id, (p.first_name || ' ' || p.last_name) AS patient_name
+SELECT
+  dept.department_id,
+  dept.dept_name,
+  appt.appointment_id,
+  appt.appointment_date,
+  appt.time_start,
+  appt.time_end,
+  p.patient_id,
+  (p.first_name || ' ' || p.last_name) AS patient_name
 FROM appointments appt
 JOIN departments dept ON dept.department_id = appt.department_id
 JOIN patients p ON p.patient_id = appt.patient_id;
 
--- ผู้ป่วยที่นัดโดยหมอ
+--ผู้ป่วยที่นัดโดยหมอ
 CREATE OR REPLACE VIEW patients_by_doctor_name AS
-SELECT doc.doctor_id, doc.full_name AS doctor_name, appt.appointment_id,
-       appt.appointment_date, appt.time_start, appt.time_end,
-       p.patient_id, (p.first_name || ' ' || p.last_name) AS patient_name
+SELECT
+  doc.doctor_id,
+  doc.full_name AS doctor_name,
+  appt.appointment_id,
+  appt.appointment_date,
+  appt.time_start,
+  appt.time_end,
+  p.patient_id,
+  (p.first_name || ' ' || p.last_name) AS patient_name
 FROM appointments appt
 JOIN doctors doc ON doc.doctor_id = appt.doctor_id
 JOIN patients p  ON p.patient_id  = appt.patient_id;
 
--- ประวัติสถานะของการนัดหมาย (เปลี่ยนเป็นฟอร์แมตสั้น ไม่มี GMT text)
+--ประวัติสถานะของการนัดหมาย
 CREATE OR REPLACE VIEW appointment_status_history_view AS
-SELECT h.id AS history_id, h.appointment_id, s.status_id, s.status_name, h.changed_by,
-       (FROM_TZ(CAST(h.changed_at AS TIMESTAMP), 'UTC') AT TIME ZONE 'Asia/Bangkok') AS changed_at,
-       h.note
+SELECT
+  h.id AS history_id,
+  h.appointment_id,
+  s.status_id,
+  s.status_name,
+  h.changed_by,
+  h.changed_at,
+  h.note
 FROM appointment_status_history h
 JOIN appointment_statuses s ON s.status_id = h.status_id;
 
--- การนัดหมายของหมอตามวันที่
-CREATE OR REPLACE VIEW doctor_appointments_all_dates AS
-SELECT doc.doctor_id, doc.full_name AS doctor_name, appt.appointment_id,
-       appt.appointment_date, appt.time_start, appt.time_end,
-       dept.dept_name, r.room_name, s.status_name
-FROM appointments appt
-JOIN doctors doc          ON doc.doctor_id       = appt.doctor_id
-JOIN departments dept     ON dept.department_id  = appt.department_id
-LEFT JOIN rooms r         ON r.room_id           = appt.room_id
-JOIN appointment_statuses s ON s.status_id       = appt.status_id;
+--จำนวนหมอของแต่ละแผนก
+CREATE OR REPLACE VIEW department_doctor_counts AS
+SELECT
+  d.department_id,
+  d.dept_name,
+  COUNT(doc.doctor_id) AS total_doctors
+FROM departments d
+LEFT JOIN doctors doc
+  ON doc.department_id = d.department_id
+GROUP BY d.department_id, d.dept_name;
 
--- สถานะการนัดหมายของผู้ป่วย
-CREATE OR REPLACE VIEW patient_appointment_status AS
-SELECT p.patient_id, (p.first_name || ' ' || p.last_name) AS patient_name,
-       appt.appointment_id, appt.appointment_date, appt.time_start, appt.time_end, s.status_name
-FROM appointments appt
-JOIN patients p            ON p.patient_id = appt.patient_id
-JOIN appointment_statuses s ON s.status_id = appt.status_id;
+--จำนวนคนไข้ของแต่ละแผนก
+CREATE OR REPLACE VIEW department_patient_counts AS
+SELECT
+  d.department_id,
+  d.dept_name,
+  COUNT(DISTINCT a.patient_id) AS total_patients
+FROM departments d
+LEFT JOIN doctors doc
+  ON doc.department_id = d.department_id
+LEFT JOIN appointments a
+  ON a.doctor_id = doc.doctor_id
+GROUP BY d.department_id, d.dept_name;
 
--- ตารางการนัดหมายตามห้อง
-CREATE OR REPLACE VIEW room_schedule AS
-SELECT r.room_id, r.room_name, appt.appointment_id, appt.appointment_date, appt.time_start, appt.time_end,
-       d.full_name AS doctor_name, dept.dept_name, (p.first_name || ' ' || p.last_name) AS patient_name, s.status_name
-FROM appointments appt
-JOIN rooms r             ON r.room_id            = appt.room_id
-JOIN doctors d           ON d.doctor_id          = appt.doctor_id
-JOIN departments dept    ON dept.department_id   = appt.department_id
-JOIN patients p          ON p.patient_id         = appt.patient_id
-JOIN appointment_statuses s ON s.status_id       = appt.status_id;
+-- แผนกที่มีจำนวนหมอมากที่สุด
+CREATE OR REPLACE VIEW department_with_most_doctors AS
+SELECT d.department_id,
+       d.dept_name,
+       COUNT(doc.doctor_id) AS total_doctors
+FROM departments d
+JOIN doctors doc ON d.department_id = doc.department_id
+GROUP BY d.department_id, d.dept_name
+HAVING COUNT(doc.doctor_id) = (
+    SELECT MAX(cnt)
+    FROM (
+        SELECT COUNT(doctor_id) AS cnt
+        FROM doctors
+        GROUP BY department_id
+    )
+);
 
--- ใบนัดที่ Complete แล้ว
-CREATE OR REPLACE VIEW appointments_confirmed AS
-SELECT appt.appointment_id, appt.appointment_date, appt.time_start, appt.time_end,
-       d.full_name AS doctor_name, (p.first_name || ' ' || p.last_name) AS patient_name,
-       dept.dept_name, r.room_name
+-- View: แผนกที่มีจำนวนผู้ป่วยมากที่สุด
+CREATE OR REPLACE VIEW department_with_most_patients AS
+SELECT d.department_id,
+       d.dept_name,
+       COUNT(DISTINCT a.patient_id) AS total_patients
+FROM departments d
+JOIN doctors doc ON d.department_id = doc.department_id
+JOIN appointments a ON doc.doctor_id = a.doctor_id
+GROUP BY d.department_id, d.dept_name
+HAVING COUNT(DISTINCT a.patient_id) = (
+    SELECT MAX(cnt)
+    FROM (
+        SELECT COUNT(DISTINCT a2.patient_id) AS cnt
+        FROM departments d2
+        JOIN doctors doc2 ON d2.department_id = doc2.department_id
+        JOIN appointments a2 ON doc2.doctor_id = a2.doctor_id
+        GROUP BY d2.department_id
+    )
+);
+
+--ใบนัดที่นัดแล้วยังไม่เสร็จ
+CREATE OR REPLACE VIEW appointments_cancelled AS
+SELECT
+  appt.appointment_id,
+  appt.appointment_date,
+  appt.time_start,
+  appt.time_end,
+  d.full_name AS doctor_name,
+  (p.first_name || ' ' || p.last_name) AS patient_name,
+  dept.dept_name,
+  r.room_name,
+  appt.cancel_reason
 FROM appointments appt
 JOIN appointment_statuses s ON s.status_id = appt.status_id
-JOIN doctors d              ON d.doctor_id = appt.doctor_id
-JOIN patients p             ON p.patient_id = appt.patient_id
-JOIN departments dept       ON dept.department_id = appt.department_id
-LEFT JOIN rooms r           ON r.room_id = appt.room_id
+JOIN doctors d      ON d.doctor_id = appt.doctor_id
+JOIN patients p     ON p.patient_id = appt.patient_id
+JOIN departments dept ON dept.department_id = appt.department_id
+LEFT JOIN rooms r   ON r.room_id = appt.room_id
+WHERE s.status_name = 'Scheduled';
+
+--ใบนัดที่ Complete แล้ว
+CREATE OR REPLACE VIEW appointments_Completed AS
+SELECT
+  appt.appointment_id,
+  appt.appointment_date,
+  appt.time_start,
+  appt.time_end,
+  d.full_name AS doctor_name,
+  (p.first_name || ' ' || p.last_name) AS patient_name,
+  dept.dept_name,
+  r.room_name
+FROM appointments appt
+JOIN appointment_statuses s ON s.status_id = appt.status_id
+JOIN doctors d      ON d.doctor_id = appt.doctor_id
+JOIN patients p     ON p.patient_id = appt.patient_id
+JOIN departments dept ON dept.department_id = appt.department_id
+LEFT JOIN rooms r   ON r.room_id = appt.room_id
 WHERE s.status_name = 'Completed';
 
--- ใบนัดที่ Cancel แล้ว
+--ใบนัดที่ Cancel แล้ว
 CREATE OR REPLACE VIEW appointments_cancelled AS
-SELECT appt.appointment_id, appt.appointment_date, appt.time_start, appt.time_end,
-       d.full_name AS doctor_name, (p.first_name || ' ' || p.last_name) AS patient_name,
-       dept.dept_name, r.room_name, appt.cancel_reason
+SELECT
+  appt.appointment_id,
+  appt.appointment_date,
+  appt.time_start,
+  appt.time_end,
+  d.full_name AS doctor_name,
+  (p.first_name || ' ' || p.last_name) AS patient_name,
+  dept.dept_name,
+  r.room_name,
+  appt.cancel_reason
 FROM appointments appt
 JOIN appointment_statuses s ON s.status_id = appt.status_id
-JOIN doctors d              ON d.doctor_id = appt.doctor_id
-JOIN patients p             ON p.patient_id = appt.patient_id
-JOIN departments dept       ON dept.department_id = appt.department_id
-LEFT JOIN rooms r           ON r.room_id = appt.room_id
+JOIN doctors d      ON d.doctor_id = appt.doctor_id
+JOIN patients p     ON p.patient_id = appt.patient_id
+JOIN departments dept ON dept.department_id = appt.department_id
+LEFT JOIN rooms r   ON r.room_id = appt.room_id
 WHERE s.status_name = 'Cancelled';
-

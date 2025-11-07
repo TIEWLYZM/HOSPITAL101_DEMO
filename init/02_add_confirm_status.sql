@@ -1,1 +1,0 @@
-MERGE INTO appointment_statuses t USING (SELECT 'S004' status_id, 'Confirmed' status_name, 3 sort_order FROM dual) s ON (t.status_id=s.status_id) WHEN NOT MATCHED THEN INSERT (status_id,status_name,sort_order) VALUES (s.status_id,s.status_name,s.sort_order);

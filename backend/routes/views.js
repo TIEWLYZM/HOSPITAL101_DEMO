@@ -1,107 +1,200 @@
-// backend/routes/views.js (patched)
 import { Router } from "express";
-import { q } from "../db.js";
+import { withConn } from "../db.js";
 
 const r = Router();
 
-const VIEW_CONFIG = {
-  rooms_by_department: {
-    view: "rooms_by_department",
-    filters: { department_id: "DEPARTMENT_ID" },
-  },
-  doctors_by_department: {
-    view: "doctors_by_department",
-    filters: { department_id: "DEPARTMENT_ID" },
-  },
-  patients_appointments_by_department: {
-    view: "patients_appointments_by_department",
-    filters: { department_id: "DEPARTMENT_ID" },
-  },
-  patients_by_doctor_name: {
-    view: "patients_by_doctor_name",
-    filters: { doctor_id: "DOCTOR_ID" },
-  },
-  appointment_status_history_view: {
-    view: "appointment_status_history_view",
-    filters: { appointment_id: "APPOINTMENT_ID", history_id: "HISTORY_ID" },
-  },
-  doctor_appointments_all_dates: {
-    view: "doctor_appointments_all_dates",
-    dateFilters: { appointment_date: "APPOINTMENT_DATE" },
-  },
-  patient_appointment_status: {
-    view: "patient_appointment_status",
-    filters: { patient_id: "PATIENT_ID" },
-  },
-  room_schedule: {
-    view: "room_schedule",
-    filters: { room_id: "ROOM_ID" },
-  },
-  appointments_confirmed: {
-    view: "appointments_confirmed",
-    filters: {},
-  },
-  appointments_cancelled: {
-    view: "appointments_cancelled",
-    filters: {},
-  },
-};
-
-function buildDayRangeBinds(paramName, yyyy_mm_dd) {
-  const [Y, M, D] = yyyy_mm_dd.split("-").map(Number);
-  // Interpret date in local time (server) then oracledb maps to Oracle DATE correctly
-  const start = new Date(Date.UTC(Y, M - 1, D, 0, 0, 0, 0));
-  const end = new Date(Date.UTC(Y, M - 1, D + 1, 0, 0, 0, 0));
-  return {
-    where: `${paramName}_COL >= :${paramName}_start AND ${paramName}_COL < :${paramName}_end`,
-    binds: {
-      [paramName + "_start"]: start,
-      [paramName + "_end"]: end,
-    },
-  };
+function normalize(result) {
+  // คืนเป็น array ของ object เสมอ (รองรับ oracledb)
+  if (!result) return [];
+  if (Array.isArray(result)) return result;
+  if (Array.isArray(result.rows) && Array.isArray(result.metaData)) {
+    const cols = result.metaData.map(m => (m.name?.toLowerCase?.() ?? String(m.name)));
+    return result.rows.map(row => {
+      const o = {};
+      row.forEach((v, i) => (o[cols[i]] = v));
+      return o;
+    });
+  }
+  if (Array.isArray(result.rows)) return result.rows;
+  return result;
 }
 
-r.get("/:name", async (req, res) => {
-  const { name } = req.params;
-  const cfg = VIEW_CONFIG[name];
-  if (!cfg) return res.status(400).json({ ok: false, message: "Unknown view" });
-
+// ---- Department related ----
+r.get("/department-doctor-counts", async (_req, res) => {
   try {
-    const whereParts = [];
-    const binds = {};
-
-    // equality filters (ids)
-    if (cfg.filters) {
-      for (const [qp, col] of Object.entries(cfg.filters)) {
-        const val = req.query[qp];
-        if (val !== undefined && val !== "") {
-          whereParts.push(`${col} = :${qp}`);
-          binds[qp] = val;
-        }
-      }
-    }
-
-    // date filters: compare by range to avoid ORA-01861/01843 and timezone issues
-    if (cfg.dateFilters) {
-      for (const [qp, col] of Object.entries(cfg.dateFilters)) {
-        const val = req.query[qp];
-        if (val) {
-          const range = buildDayRangeBinds(qp, String(val));
-          // swap placeholder column name with real column
-          whereParts.push(range.where.replace(`${qp}_COL`, col));
-          Object.assign(binds, range.binds);
-        }
-      }
-    }
-
-    const sql = `SELECT * FROM ${cfg.view}` + (whereParts.length ? ` WHERE ${whereParts.join(" AND ")}` : "");
-    console.log("[views]", name, "SQL:", sql, "BINDS:", binds);
-
-    const result = await q(sql, binds);
-    res.json({ ok: true, rows: result.rows });
+    const sql = `
+      SELECT department_id, dept_name, total_doctors
+      FROM department_doctor_counts
+      ORDER BY total_doctors DESC, dept_name ASC`;
+    const out = await withConn(async (c) => c.execute(sql));
+    res.json(normalize(out));
   } catch (e) {
-    console.error("views error:", e);
-    res.status(500).json({ ok: false, message: e.message });
+    res.status(500).json({ ok:false, message:"query failed", error:String(e) });
+  }
+});
+
+r.get("/department-patient-counts", async (_req, res) => {
+  try {
+    const sql = `
+      SELECT department_id, dept_name, total_patients
+      FROM department_patient_counts
+      ORDER BY total_patients DESC, dept_name ASC`;
+    const out = await withConn(async (c) => c.execute(sql));
+    res.json(normalize(out));
+  } catch (e) {
+    res.status(500).json({ ok:false, message:"query failed", error:String(e) });
+  }
+});
+
+r.get("/department-most-doctors", async (_req, res) => {
+  try {
+    const sql = `
+      SELECT department_id, dept_name, total_doctors
+      FROM department_doctor_counts
+      ORDER BY total_doctors DESC, dept_name ASC`;
+    const out = await withConn(async (c) => c.execute(sql));
+    res.json(normalize(out));
+  } catch (e) {
+    res.status(500).json({ ok:false, message:"query failed", error:String(e) });
+  }
+});
+
+r.get("/department-most-patients", async (_req, res) => {
+  try {
+    const sql = `
+      SELECT department_id, dept_name, total_patients
+      FROM department_patient_counts
+      ORDER BY total_patients DESC, dept_name ASC`;
+    const out = await withConn(async (c) => c.execute(sql));
+    res.json(normalize(out));
+  } catch (e) {
+    res.status(500).json({ ok:false, message:"query failed", error:String(e) });
+  }
+});
+
+// ---- Simple view pass-throughs (ชื่อแบบขีดกลาง) ----
+r.get("/rooms-by-department", async (_req, res) => {
+  try {
+    const sql = `
+      SELECT department_id, dept_name, room_id, room_name, location_desc
+      FROM rooms_by_department
+      ORDER BY dept_name, room_name`;
+    const out = await withConn(async (c) => c.execute(sql));
+    res.json(normalize(out));
+  } catch (e) {
+    res.status(500).json({ ok:false, message:"query failed", error:String(e) });
+  }
+});
+
+r.get("/doctors-by-department", async (_req, res) => {
+  try {
+    const sql = `
+      SELECT department_id, dept_name, doctor_id, doctor_name, specialty
+      FROM doctors_by_department
+      ORDER BY dept_name, doctor_name`;
+    const out = await withConn(async (c) => c.execute(sql));
+    res.json(normalize(out));
+  } catch (e) {
+    res.status(500).json({ ok:false, message:"query failed", error:String(e) });
+  }
+});
+
+r.get("/patients-appointments-by-department", async (_req, res) => {
+  try {
+    const sql = `
+      SELECT department_id, dept_name, appointment_id, appointment_date, time_start, time_end, patient_id, patient_name
+      FROM patients_appointments_by_department
+      ORDER BY dept_name, appointment_date DESC, time_start DESC`;
+    const out = await withConn(async (c) => c.execute(sql));
+    res.json(normalize(out));
+  } catch (e) {
+    res.status(500).json({ ok:false, message:"query failed", error:String(e) });
+  }
+});
+
+r.get("/patients-by-doctor-name", async (_req, res) => {
+  try {
+    const sql = `
+      SELECT doctor_id, doctor_name, appointment_id, appointment_date, time_start, time_end, patient_id, patient_name
+      FROM patients_by_doctor_name
+      ORDER BY doctor_name, appointment_date DESC, time_start DESC`;
+    const out = await withConn(async (c) => c.execute(sql));
+    res.json(normalize(out));
+  } catch (e) {
+    res.status(500).json({ ok:false, message:"query failed", error:String(e) });
+  }
+});
+
+r.get("/appointment-status-history", async (_req, res) => {
+  try {
+    const sql = `
+      SELECT history_id, appointment_id, status_id, status_name, changed_by, changed_at, note
+      FROM appointment_status_history_view
+      ORDER BY changed_at DESC`;
+    const out = await withConn(async (c) => c.execute(sql));
+    res.json(normalize(out));
+  } catch (e) {
+    res.status(500).json({ ok:false, message:"query failed", error:String(e) });
+  }
+});
+
+r.get("/appointments-completed", async (_req, res) => {
+  try {
+    const sql = `
+      SELECT appointment_id, appointment_date, time_start, time_end, doctor_name, patient_name, dept_name, room_name
+      FROM appointments_completed
+      ORDER BY appointment_date DESC, time_start DESC`;
+    const out = await withConn(async (c) => c.execute(sql));
+    res.json(normalize(out));
+  } catch (e) {
+    res.status(500).json({ ok:false, message:"query failed", error:String(e) });
+  }
+});
+
+r.get("/appointments-cancelled", async (_req, res) => {
+  try {
+    const sql = `
+      SELECT appointment_id, appointment_date, time_start, time_end, doctor_name, patient_name, dept_name, room_name, cancel_reason
+      FROM appointments_cancelled
+      ORDER BY appointment_date DESC, time_start DESC`;
+    const out = await withConn(async (c) => c.execute(sql));
+    res.json(normalize(out));
+  } catch (e) {
+    res.status(500).json({ ok:false, message:"query failed", error:String(e) });
+  }
+});
+
+/**
+ * ---------- NEW: Dynamic view endpoint ----------
+ * รองรับ GET /api/views/:view (ชื่อวิวแบบขีดล่าง)
+ * ใช้ allow-list เพื่อความปลอดภัย
+ * วาง route นี้ไว้ "ท้ายไฟล์" เพื่อไม่บัง route เฉพาะทางด้านบน
+ */
+const ALLOWED_VIEWS = new Set([
+  "rooms_by_department",
+  "doctors_by_department",
+  "patients_appointments_by_department",
+  "patients_by_doctor_name",
+  "appointment_status_history_view",
+  "department_doctor_counts",
+  "department_patient_counts",
+  "department_with_most_doctors",
+  "department_with_most_patients",
+  "appointments_completed",
+  "appointments_cancelled",
+]);
+
+r.get("/:view", async (req, res) => {
+  try {
+    const view = String(req.params.view || "").trim();
+    if (!ALLOWED_VIEWS.has(view)) {
+      return res.status(404).json({ ok:false, message:`Unknown view: ${view}` });
+    }
+    const sql = `SELECT * FROM ${view}`;
+    const out = await withConn(async (c) => c.execute(sql));
+    res.json(normalize(out));
+  } catch (e) {
+    res.status(500).json({ ok:false, message:"query failed", error:String(e) });
   }
 });
 
