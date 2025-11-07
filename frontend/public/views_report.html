@@ -5,76 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Views Report</title>
     <style>
-      :root {
-        --bg: #0c1220;
-        --card: #121a2b;
-        --muted: #8ea0bd;
-        --text: #e6ecff;
-        --line: #24324d;
-        --accent: #0ea5e9;
-      }
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        margin: 0;
-        background: var(--bg);
-        color: var(--text);
-        font-family: system-ui, Segoe UI, Roboto, Arial;
-      }
-      .wrap {
-        max-width: 1100px;
-        margin: 48px auto;
-        padding: 0 20px;
-      }
-      .card {
-        background: var(--card);
-        border: 1px solid var(--line);
-        border-radius: 16px;
-        padding: 18px;
-      }
-      .row {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin-bottom: 12px;
-      }
-      select,
-      button {
-        padding: 10px 12px;
-        border-radius: 12px;
-        border: 1px solid var(--line);
-        background: #0e1626;
-        color: var(--text);
-      }
-      table {
-        width: 100%;
-        border-collapse: separate;
-        border-spacing: 0;
-        margin-top: 10px;
-      }
-      thead th {
-        font-size: 12px;
-        color: var(--muted);
-        text-align: left;
-        padding: 10px 12px;
-        background: #0e1626;
-        border-bottom: 1px solid var(--line);
-      }
-      tbody td {
-        padding: 12px;
-        border-bottom: 1px solid var(--line);
-      }
-      tbody tr:hover {
-        background: #0e1626;
-      }
+      :root{ --bg:#0c1220; --card:#121a2b; --muted:#8ea0bd; --text:#e6ecff; --line:#24324d; --accent:#0ea5e9; }
+      *{ box-sizing:border-box } body{ margin:0; background:var(--bg); color:var(--text); font-family:system-ui, Segoe UI, Roboto, Arial }
+      .wrap{ max-width:1100px; margin:48px auto; padding:0 20px } .card{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px }
+      .row{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px }
+      select,button,input{ padding:10px 12px; border-radius:12px; border:1px solid var(--line); background:#0e1626; color:var(--text) }
+      h2{ margin:10px 0 0 0; font-size:18px; font-weight:800; color:#cfe1ff } .muted{ color:var(--muted); font-size:12px }
+      table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:10px } thead th{ font-size:12px; color:var(--muted); text-align:left; padding:10px 12px; background:#0e1626; border-bottom:1px solid var(--line) }
+      tbody td{ padding:12px; border-bottom:1px solid var(--line) } tbody tr:hover{ background:#0e1626 } .hide{ display:none }
     </style>
   </head>
   <body>
     <div class="wrap">
       <div class="card">
         <div class="row">
-          <select id="v">
+          <select id="v" title="เลือกวิว">
             <option>rooms_by_department</option>
             <option>doctors_by_department</option>
             <option>patients_appointments_by_department</option>
@@ -84,41 +29,103 @@
             <option>patient_appointment_status</option>
             <option>room_schedule</option>
             <option>appointments_confirmed</option>
-            <option>appointments_cancelled</option></select
-          ><button id="load">โหลด</button>
+            <option>appointments_cancelled</option>
+          </select>
+          <select id="dept" class="hide" style="min-width:220px"></select>
+          <select id="doctor" class="hide" style="min-width:220px"></select>
+          <select id="patient" class="hide" style="min-width:220px"></select>
+          <select id="room" class="hide" style="min-width:220px"></select>
+          <select id="history" class="hide" style="min-width:280px"></select>
+          <input  id="date" class="hide"  type="date" />
+          <button id="load">โหลด</button>
         </div>
-        <div style="overflow: auto">
-          <table id="tbl">
-            <thead></thead>
-            <tbody></tbody>
-          </table>
+        <h2 id="heading" class="muted">—</h2>
+        <div style="overflow:auto">
+          <table id="tbl"><thead></thead><tbody></tbody></table>
         </div>
       </div>
     </div>
     <script type="module">
       import { apiGet } from "./js/api.js";
-      function render(rows) {
-        const th = document.querySelector("#tbl thead"),
-          tb = document.querySelector("#tbl tbody");
-        if (!rows.length) {
-          th.innerHTML = "";
-          tb.innerHTML = "";
-          return;
-        }
-        const cols = Object.keys(rows[0]);
-        th.innerHTML = `<tr>${cols.map((c) => `<th>${c}</th>`).join("")}</tr>`;
-        tb.innerHTML = rows
-          .map(
-            (r) =>
-              `<tr>${cols.map((c) => `<td>${r[c] ?? ""}</td>`).join("")}</tr>`
-          )
-          .join("");
-      }
-      document.getElementById("load").onclick = async () => {
-        const v = document.getElementById("v").value;
-        const res = await apiGet(`/api/views/${v}`);
-        render(res.rows);
+      const vSel = document.getElementById("v");
+      const headEl = document.getElementById("heading");
+      const el = {
+        dept: document.getElementById("dept"), doctor: document.getElementById("doctor"),
+        patient: document.getElementById("patient"), room: document.getElementById("room"),
+        history: document.getElementById("history"), date: document.getElementById("date"),
       };
+      let departments=[], doctors=[], patients=[], rooms=[], historyLoaded=false;
+      (async () => {
+        const o = await apiGet("/api/options");
+        departments = o?.departments ?? []; doctors = o?.doctors ?? [];
+        patients = o?.patients ?? []; rooms = o?.rooms ?? [];
+        fill(el.dept,departments,"DEPARTMENT_ID","DEPT_NAME","— เลือกแผนก —");
+        fill(el.doctor,doctors,"DOCTOR_ID","FULL_NAME","— เลือกแพทย์ —");
+        fill(el.patient,patients,"PATIENT_ID","FULL_NAME","— เลือกผู้ป่วย —");
+        fill(el.room,rooms,"ROOM_ID","ROOM_NAME","— เลือกห้อง —");
+        updateControls(); // no auto-load
+      })().catch(console.error);
+      function fill(sel,rows,v,t,ph="— เลือก —"){ sel.innerHTML = `<option value="">${ph}</option>` + rows.map(r=>`<option value="${r[v]}">${r[t]}</option>`).join(""); }
+      function render(rows){ const th=document.querySelector("#tbl thead"), tb=document.querySelector("#tbl tbody");
+        if(!rows?.length){ th.innerHTML=""; tb.innerHTML=""; return; }
+        const cols = Object.keys(rows[0]);
+        th.innerHTML = `<tr>${cols.map(c=>`<th>${c}</th>`).join("")}</tr>`;
+        tb.innerHTML = rows.map(r=>`<tr>${cols.map(c=>`<td>${r[c] ?? ""}</td>`).join("")}</tr>`).join("");
+      }
+      function updateControls(){
+        const v=vSel.value; Object.values(el).forEach(x=>x.classList.add("hide"));
+        if(["rooms_by_department","doctors_by_department","patients_appointments_by_department"].includes(v)) el.dept.classList.remove("hide");
+        if(v==="patients_by_doctor_name") el.doctor.classList.remove("hide");
+        if(v==="appointment_status_history_view"){ el.history.classList.remove("hide"); if(!historyLoaded) loadHistoryOptions(); }
+        if(v==="doctor_appointments_all_dates") el.date.classList.remove("hide");
+        if(v==="patient_appointment_status") el.patient.classList.remove("hide");
+        if(v==="room_schedule") el.room.classList.remove("hide");
+        headEl.textContent = heading();
+      }
+      vSel.addEventListener("change", ()=>updateControls());
+      ["dept","doctor","patient","room","history","date"].forEach(k=> el[k].addEventListener("change", ()=> headEl.textContent=heading()));
+      document.getElementById("load").onclick = loadView;
+
+      async function loadHistoryOptions(){
+        const hist = await apiGet("/api/views/appointment_status_history_view");
+        const map = new Map();
+        const pas = await apiGet("/api/views/patient_appointment_status");
+        (pas.rows??[]).forEach(r=>{ if(r.APPOINTMENT_ID && r.PATIENT_NAME) map.set(String(r.APPOINTMENT_ID), r.PATIENT_NAME); });
+        const uniq = [...new Set((hist.rows??[]).map(r=>r.APPOINTMENT_ID).filter(Boolean))];
+        const items = uniq.map(id=>({ id, label: map.get(String(id)) ? `${id} — ${map.get(String(id))}` : `${id} — ไม่ทราบชื่อผู้ป่วย` }))
+                          .sort((a,b)=>a.label.localeCompare(b.label,'th'));
+        el.history.innerHTML = `<option value="">— เลือกใบนัดหมาย —</option>` + items.map(x=>`<option value="${x.id}">${x.label}</option>`).join("");
+        historyLoaded=true;
+      }
+      function heading(){
+        const v=vSel.value, txt=(sel,ph)=> sel.classList.contains("hide")? null : (sel.tagName==="INPUT"?(sel.value||ph):(sel.selectedIndex>0?sel.options[sel.selectedIndex].textContent:ph));
+        switch(v){
+          case "rooms_by_department": return `ห้องของแผนก (${txt(el.dept,"ยังไม่ได้เลือกแผนก")})`;
+          case "doctors_by_department": return `แพทย์ของแผนก (${txt(el.dept,"ยังไม่ได้เลือกแผนก")})`;
+          case "patients_appointments_by_department": return `คนไข้ตามใบนัดของแผนก (${txt(el.dept,"ยังไม่ได้เลือกแผนก")})`;
+          case "patients_by_doctor_name": return `ผู้ป่วยที่นัดโดยหมอ (${txt(el.doctor,"ยังไม่ได้เลือกแพทย์")})`;
+          case "appointment_status_history_view": return `ประวัติสถานะของการนัดหมาย (${txt(el.history,"ยังไม่ได้เลือกใบนัดหมาย")})`;
+          case "doctor_appointments_all_dates": return `การนัดหมายของหมอในวันที่ (${txt(el.date,"ยังไม่ได้เลือกวันที่")})`;
+          case "patient_appointment_status": return `สถานะการนัดหมายของผู้ป่วย (${txt(el.patient,"ยังไม่ได้เลือกผู้ป่วย")})`;
+          case "room_schedule": return `ตารางการนัดหมายของห้อง (${txt(el.room,"ยังไม่ได้เลือกห้อง")})`;
+          case "appointments_confirmed": return `ใบนัดที่ Confirm แล้ว`;
+          case "appointments_cancelled": return `ใบนัดที่ Cancel แล้ว`;
+          default: return v;
+        }
+      }
+
+      async function loadView(){
+        const view=vSel.value; headEl.textContent=heading();
+        const params=new URLSearchParams();
+        if(!el.dept.classList.contains("hide") && el.dept.value) params.set("department_id", el.dept.value);
+        if(!el.doctor.classList.contains("hide") && el.doctor.value) params.set("doctor_id", el.doctor.value);
+        if(!el.patient.classList.contains("hide") && el.patient.value) params.set("patient_id", el.patient.value);
+        if(!el.room.classList.contains("hide") && el.room.value) params.set("room_id", el.room.value);
+        if(!el.history.classList.contains("hide") && el.history.value) params.set("appointment_id", el.history.value);
+        if(!el.date.classList.contains("hide") && el.date.value) params.set("appointment_date", el.date.value);
+        let url = `/api/views/${view}`; if([...params.keys()].length) url += `?${params.toString()}`;
+        const res = await apiGet(url); render(res.rows ?? []);
+      }
     </script>
   </body>
 </html>

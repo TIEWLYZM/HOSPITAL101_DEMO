@@ -134,104 +134,187 @@
     </div>
   </div>
 
-  <script type="module">
-    import { apiGet, apiPost } from "./js/api.js";
+<script type="module">
+  import { apiGet, apiPost } from "./js/api.js";
 
-    // helper toast
-    function toast(message, type = "info") {
-      Toastify({
-        text: message,
-        duration: 3000,
-        close: true,
-        gravity: "top",
-        position: "center",
-        stopOnFocus: true,
-        className: type === "success" ? "toast-success"
-               : type === "error"   ? "toast-error" : "",
-      }).showToast();
-    }
+  // toast
+  function toast(message, type = "info") {
+    Toastify({
+      text: message, duration: 3000, close: true, gravity: "top",
+      position: "center", stopOnFocus: true,
+      className: type === "success" ? "toast-success"
+             : type === "error"   ? "toast-error" : "",
+    }).showToast();
+  }
 
-    // โหลดตัวเลือก
-    const o = await apiGet("/api/options");
-    const fill = (id, rows, v, t) => {
-      const sel = document.getElementById(id);
-      rows.forEach(r => {
-        const opt = document.createElement("option");
-        opt.value = r[v];
-        opt.textContent = r[t];
-        sel.appendChild(opt);
-      });
-    };
-    fill("patient_id", o.patients, "PATIENT_ID", "FULL_NAME");
-    fill("department_id", o.departments, "DEPARTMENT_ID", "DEPT_NAME");
-    fill("doctor_id", o.doctors, "DOCTOR_ID", "FULL_NAME");
-    fill("room_id", o.rooms, "ROOM_ID", "ROOM_NAME");
-    fill("type_id", o.types, "TYPE_ID", "TYPE_NAME");
-
-    // คำนวณเวลาสิ้นสุดฝั่งหน้าเว็บ
-    const typesById = Object.fromEntries(o.types.map(x => [x.TYPE_ID, Number(x.DEFAULT_DURATION_MIN || 0)]));
-    const timeStartEl = document.getElementById("time_start");
-    const typeEl = document.getElementById("type_id");
-    const durEl = document.getElementById("duration_min");
-    const endPreviewEl = document.getElementById("time_end_preview");
-
-    function addMinutesHHMM(hhmm, minutes){
-      if(!hhmm) return "";
-      const [H,M] = hhmm.split(":").map(Number);
-      const base = new Date(2000,0,1,H,M,0);
-      const end = new Date(base.getTime() + minutes*60000);
-      const hh = String(end.getHours()).padStart(2,"0");
-      const mm = String(end.getMinutes()).padStart(2,"0");
-      return `${hh}:${mm}`;
-    }
-    function updatePreview(){
-      const t = timeStartEl.value;
-      const defDur = typesById[typeEl.value] || 0;
-      const extra = Number(durEl.value || 0);
-      endPreviewEl.value = t ? addMinutesHHMM(t, defDur + extra) : "";
-    }
-    timeStartEl.addEventListener("input", updatePreview);
-    typeEl.addEventListener("change", updatePreview);
-    durEl.addEventListener("input", updatePreview);
-
-    // ส่งบันทึก
-    const form = document.getElementById("f");
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const body = {
-        patient_id: form.patient_id.value,
-        doctor_id: form.doctor_id.value,
-        department_id: form.department_id.value,
-        room_id: form.room_id.value || null,
-        type_id: form.type_id.value,
-        appointment_date: form.appointment_date.value,
-        time_start: form.time_start.value,
-        duration_min: Number(form.duration_min.value || 0),
-        notes: form.notes.value || null,
-        room_no: form.room_no.value || null
-      };
-
-      // ตรวจค่าว่างหลัก ๆ ก่อนส่ง
-      if (!body.patient_id)  return toast("กรุณาเลือกผู้ป่วย", "error");
-      if (!body.department_id) return toast("กรุณาเลือกแผนก", "error");
-      if (!body.doctor_id)   return toast("กรุณาเลือกแพทย์", "error");
-      if (!body.type_id)     return toast("กรุณาเลือกประเภทนัด", "error");
-      if (!body.appointment_date) return toast("กรุณาเลือกวันที่นัด", "error");
-      if (!body.time_start)  return toast("กรุณาใส่เวลาเริ่ม", "error");
-
-      try{
-        const r = await apiPost("/api/appointments", body);
-        if (r.ok) {
-          toast(`บันทึกสำเร็จ เวลาเสร็จสิ้น: ${r.data.time_end}`, "success");
-          form.reset();
-          endPreviewEl.value="";
-        } else {
-          toast(`ล้มเหลว: ${r.message}`, "error");
-        }
-      }catch(err){
-        toast("ล้มเหลว: " + (err?.message || err), "error");
-      }
+  function dateLabelFromYMD(ymd) {
+    if (!ymd || typeof ymd !== "string") return "";
+    const [y, m, d] = ymd.split("-").map(Number);
+    // ใช้ UTC เพื่อกันการเลื่อนวันจาก timezone
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    return dt.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "2-digit",
     });
-  </script>
+  }
+  // -------- โหลด options ทั้งหมด --------
+  const o = await apiGet("/api/options");
+
+  // เติม dropdown helper
+  const fill = (id, rows, v, t) => {
+    const sel = document.getElementById(id);
+    rows.forEach(r => {
+      const opt = document.createElement("option");
+      opt.value = r[v];
+      opt.textContent = r[t];
+      sel.appendChild(opt);
+    });
+  };
+
+  // เติม dropdown ที่ไม่ต้องพึ่งกัน
+  fill("patient_id",    o.patients,    "PATIENT_ID",    "FULL_NAME");
+  fill("type_id",       o.types,       "TYPE_ID",       "TYPE_NAME");
+  fill("doctor_id",     o.doctors,     "DOCTOR_ID",     "FULL_NAME");
+  fill("department_id", o.departments, "DEPARTMENT_ID", "DEPT_NAME");
+
+  // ---------- ห้อง: กรองตามแผนก (ของ dropdown department_id) ----------
+  const roomSel   = document.getElementById("room_id");
+  const deptSel   = document.getElementById("department_id");
+  const doctorSel = document.getElementById("doctor_id");
+
+  const roomsAll = Array.isArray(o.rooms) ? o.rooms : [];
+  const ROOM_DEPT_KEY =
+    roomsAll.length
+      ? (Object.keys(roomsAll[0]).find(k => k.toUpperCase() === "DEPARTMENT_ID")
+        || Object.keys(roomsAll[0]).find(k => k.toUpperCase() === "DEPT_ID")
+        || "DEPARTMENT_ID")
+      : "DEPARTMENT_ID";
+
+  function clearRooms() {
+    roomSel.innerHTML = `<option value="">— เลือกห้อง —</option>`;
+  }
+  function fillRoomsForDept(deptId) {
+    clearRooms();
+    if (!deptId) return;
+    const list = roomsAll.filter(r => String(r[ROOM_DEPT_KEY]) === String(deptId));
+    list.forEach(r => {
+      const opt = document.createElement("option");
+      opt.value = r.ROOM_ID;
+      opt.textContent = r.ROOM_NAME;
+      roomSel.appendChild(opt);
+    });
+  }
+
+  // ---------- NEW: ล็อกแผนกตามหมอ ----------
+  // ทำ map: doctor_id -> department_id
+  const DOCTOR_DEPT_KEY =
+    (o.doctors[0] && (Object.keys(o.doctors[0]).find(k => k.toUpperCase() === "DEPARTMENT_ID")
+      || Object.keys(o.doctors[0]).find(k => k.toUpperCase() === "DEPT_ID")))
+    || "DEPARTMENT_ID";
+
+  const doctorToDept = new Map(
+    (o.doctors || []).map(d => [String(d.DOCTOR_ID), d[DOCTOR_DEPT_KEY]])
+  );
+
+  // เมื่อเลือกแพทย์ → เซ็ตแผนกให้ตรงกับหมอ และล็อก dropdown แผนก + รีเฟรชห้อง
+  function lockDeptByDoctor(docId) {
+    const depId = doctorToDept.get(String(docId));
+    if (depId) {
+      deptSel.value = String(depId);
+      deptSel.disabled = true;               // ล็อกไม่ให้เปลี่ยนแผนกผิดจากหมอ
+      fillRoomsForDept(depId);               // รีเฟรชห้องตามแผนกของหมอ
+    } else {
+      // หมอไม่มี department_id -> ปลดล็อกให้เลือกเองได้
+      deptSel.disabled = false;
+      clearRooms();
+    }
+  }
+
+  doctorSel.addEventListener("change", () => {
+    lockDeptByDoctor(doctorSel.value);
+  });
+
+  // ยังอนุญาตให้ผู้ใช้เลือกแผนกเองได้ (กรณีต้องปลดล็อก)
+  deptSel.addEventListener("change", () => {
+    if (!deptSel.disabled) fillRoomsForDept(deptSel.value);
+  });
+
+  // เริ่มหน้าใหม่: ให้แผนกยังไม่ถูกล็อก จนกว่าจะเลือกหมอ
+  deptSel.disabled = false;
+  clearRooms();
+
+  // ---------- คำนวณเวลาสิ้นสุด (preview) ----------
+  const typesById = Object.fromEntries(
+    o.types.map(x => [x.TYPE_ID, Number(x.DEFAULT_DURATION_MIN || 0)])
+  );
+  const timeStartEl = document.getElementById("time_start");
+  const typeEl = document.getElementById("type_id");
+  const durEl = document.getElementById("duration_min");
+  const endPreviewEl = document.getElementById("time_end_preview");
+
+  function addMinutesHHMM(hhmm, minutes){
+    if(!hhmm) return "";
+    const [H,M] = hhmm.split(":").map(Number);
+    const base = new Date(2000,0,1,H,M,0);
+    const end = new Date(base.getTime() + minutes*60000);
+    const hh = String(end.getHours()).padStart(2,"0");
+    const mm = String(end.getMinutes()).padStart(2,"0");
+    return `${hh}:${mm}`;
+  }
+  function updatePreview(){
+    const t = timeStartEl.value;
+    const defDur = typesById[typeEl.value] || 0;
+    const extra = Number(durEl.value || 0);
+    endPreviewEl.value = t ? addMinutesHHMM(t, defDur + extra) : "";
+  }
+  timeStartEl.addEventListener("input", updatePreview);
+  typeEl.addEventListener("change", updatePreview);
+  durEl.addEventListener("input", updatePreview);
+
+  // ---------- ส่งบันทึก ----------
+  const form = document.getElementById("f");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    // ถ้าเลือกหมอไว้ ให้แน่ใจว่า dept ถูกล็อกตามหมอ
+    if (doctorSel.value) lockDeptByDoctor(doctorSel.value);
+
+    const body = {
+      patient_id: form.patient_id.value,
+      doctor_id:  form.doctor_id.value,
+      department_id: form.department_id.value,     // จะเป็นของหมอโดยอัตโนมัติ
+      room_id:    form.room_id.value || null,
+      type_id:    form.type_id.value,
+      appointment_date: form.appointment_date.value,
+      time_start: form.time_start.value,
+      duration_min: Number(form.duration_min.value || 0),
+      notes: form.notes.value || null,
+      room_no: form.room_no.value || null
+    };
+
+    if (!body.patient_id)        return toast("กรุณาเลือกผู้ป่วย","error");
+    if (!body.doctor_id)         return toast("กรุณาเลือกแพทย์","error");
+    if (!body.department_id)     return toast("กรุณาเลือกแผนก","error");
+    if (!body.type_id)           return toast("กรุณาเลือกประเภทนัด","error");
+    if (!body.appointment_date)  return toast("กรุณาเลือกวันที่นัด","error");
+    if (!body.time_start)        return toast("กรุณาใส่เวลาเริ่ม","error");
+
+    try{
+      const r = await apiPost("/api/appointments", body);
+      if (r.ok) {
+        toast(`บันทึกสำเร็จ เวลาเสร็จสิ้น: ${r.data.time_end}`, "success");
+        form.reset();
+        deptSel.disabled = false; // ปลดล็อกกลับเมื่อรีเซ็ตฟอร์ม
+        clearRooms();
+        endPreviewEl.value = "";
+      } else {
+        toast(`ล้มเหลว: ${r.message}`, "error");
+      }
+    }catch(err){
+      toast("ล้มเหลว: " + (err?.message || err), "error");
+    }
+  });
+</script>
 </body>
 </html>
